@@ -6,19 +6,34 @@
 import { ethers } from "hardhat";
 import fs from "fs";
 
-async function main() {
-  // Hardhat always runs the compile task when running scripts with its command
-  // line interface.
-  //
-  // If this script is run directly using `node` you may want to call compile
-  // manually to make sure everything is compiled
-  // await hre.run('compile');
+function makeChunks(arrayToWork: any[]) {
+  let i, j, temporary;
+  const chunk = 100;
+  const chunks = [];
+  for (i = 0, j = arrayToWork.length; i < j; i += chunk) {
+    temporary = arrayToWork.slice(i, i + chunk);
+    chunks.push(temporary);
+  }
 
-  // We get the contract to deploy
-  const RytellCharacters = await ethers.getContractFactory("Rytell");
-  const characters = await RytellCharacters.attach(
-    "0x0ca68D5768BECA6FCF444C01FE1fb6d47C019b9f"
+  return chunks;
+}
+
+async function wait() {
+  await new Promise((resolve, reject) =>
+    setTimeout(() => {
+      console.log("waited 10 seconds");
+      resolve(true);
+    }, 10000)
   );
+}
+
+async function getERC721NftIdAndOwners(contractInfo: {
+  name: string;
+  address: string;
+  dumpFileName: string;
+}) {
+  const NFTChars = await ethers.getContractFactory(contractInfo.name);
+  const characters = await NFTChars.attach(contractInfo.address);
   const totalSupply = await characters.totalSupply();
   const characterOwners: any = {};
   const allCharacterIndexes = [];
@@ -26,22 +41,48 @@ async function main() {
     allCharacterIndexes[index] = index;
   }
 
-  await Promise.all(
-    allCharacterIndexes.map(async (characterIndex) => {
-      const characterId = await characters.tokenByIndex(characterIndex);
-      characterOwners[characterId.toString()] = "";
-    })
-  );
+  const chunks = makeChunks(allCharacterIndexes);
+  for (let index = 0; index < chunks.length; index++) {
+    console.log(chunks[index].length);
+    const chunkCharacters: string[] = [];
+    await Promise.all(
+      chunks[index].map(async (characterIndex) => {
+        const characterId = await characters.tokenByIndex(characterIndex);
+        characterOwners[characterId.toString()] = "";
+        chunkCharacters.push(characterId.toString());
+      })
+    );
 
-  await Promise.all(
-    Object.keys(characterOwners).map(async (characterId) => {
-      const owner = await characters.ownerOf(characterId);
-      characterOwners[characterId] = owner;
-    })
-  );
+    await Promise.all(
+      chunkCharacters.map(async (characterId) => {
+        const owner = await characters.ownerOf(characterId);
+        characterOwners[characterId] = owner;
+      })
+    );
+
+    await wait();
+    console.log(
+      Object.keys(characterOwners).length,
+      " out of: ",
+      allCharacterIndexes.length
+    );
+  }
 
   const data = JSON.stringify(characterOwners, null, 2);
-  fs.writeFileSync("characterOwners.json", data);
+  fs.writeFileSync(contractInfo.dumpFileName, data);
+}
+
+async function main() {
+  // await getERC721NftIdAndOwners({
+  //   name: "Rytell",
+  //   address: "0x0ca68D5768BECA6FCF444C01FE1fb6d47C019b9f",
+  //   dumpFileName: "rytellCharactersAndOwners.json",
+  // });
+  await getERC721NftIdAndOwners({
+    name: "CryptoSeals",
+    address: "0x0540E4EE0C5CdBA347C2f0E011ACF8651bB70Eb9",
+    dumpFileName: "csCharactersAndOwners.json",
+  });
 }
 
 // We recommend this pattern to be able to use async/await everywhere
