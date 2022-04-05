@@ -47,9 +47,13 @@ async function getERC721NftIdAndOwners(contractInfo: {
     const chunkCharacters: string[] = [];
     await Promise.all(
       chunks[index].map(async (characterIndex) => {
-        const characterId = await characters.tokenByIndex(characterIndex);
-        characterOwners[characterId.toString()] = "";
-        chunkCharacters.push(characterId.toString());
+        try {
+          const characterId = await characters.tokenByIndex(characterIndex);
+          characterOwners[characterId.toString()] = "";
+          chunkCharacters.push(characterId.toString());
+        } catch (error) {
+          console.log(error);
+        }
       })
     );
 
